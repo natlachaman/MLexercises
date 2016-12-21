@@ -3,101 +3,117 @@ close all
 load('mnistAll.mat')
 rng(42)
 % define parameters
-eta = 0.00001;                 % learning rate
-layers = 2;                  % # hidden layers
-neurons_h = 784;             % # neurons per hidden layer
+eta = 0.00001;                % learning rate
+layers = 2;                  % # layers  =(hidden layers + 1)
+neurons_h = 1;             % # neurons per hidden layer
 neurons_in = 784;            % # input neurons
 neurons_out = 1;             % # output neurons
-max_iter = 10500;             % # iterate for so long
-bias = -1;
-assert(layers>0);   % layers must be at least 1
+max_iter = 100;             % # iterate for so long
+bias = 0;
+assert(layers>0);            % layers must be at least 1
 
 % define weights matrixes
-w.in  = gpuArray(rand(neurons_h,neurons_in)*2-1);
-w.out = gpuArray(rand(neurons_out,neurons_h)*2-1);
-w.h   = gpuArray(rand(neurons_h,neurons_h,layers-1)*2-1);
+w = cell(1,layers);
+w{1}  = gpuArray((rand(neurons_h,neurons_in)*2-1));
+for k = 2:layers
+   w{k}  = gpuArray(rand(neurons_h,neurons_h)*2-1);
+end
+w{end} = gpuArray(rand(neurons_out,neurons_h)*2-1);
 
-% define input and output memory for each neuron
-y.h_in   = gpuArray(zeros(neurons_h,layers));    % what comes in to each layer
-y.h_out  = gpuArray(zeros(neurons_h,layers));    % what comes out of each layer
-y.o_in   = gpuArray(zeros(neurons_out));         % final output neuron(s)
-y.o_out  = gpuArray(zeros(neurons_out));         % final output neuron(s)
 
-% define delta values for each neuron
-d.out = gpuArray(zeros(neurons_out));
-d.h   = gpuArray(zeros(neurons_h,layers));
+% define input and output memorx for each neuron
+x        = cell(1,layers);
+for k = 1:layers-1
+   x{k}  = gpuArray(zeros(neurons_h,1));    % what comes out of each layer
+end
+x{end}  = gpuArray(zeros(neurons_out,1));         % final output neuron(s)
 
+% define delta
+d = cell(1,layers);
+for k = 1:layers-1
+    d{k}  = gpuArray(zeros(neurons_h,1));
+end
+d{end}  = gpuArray(zeros(neurons_out,1));
 
 % get train/test data
-train = double(mnist.train_images(:,:,(mnist.train_labels==1) | (mnist.train_labels==8)));
-train_label = double(mnist.train_labels((mnist.train_labels==1) | (mnist.train_labels==8)));
+train = double(mnist.train_images(:,:,(mnist.train_labels==1) | (mnist.train_labels==7)));
+train_label = double(mnist.train_labels((mnist.train_labels==1) | (mnist.train_labels==7)));
 train_label(train_label==1) = -1;
-train_label(train_label==8) = 1;
+train_label(train_label==7) = 1;
 t = train_label;
-test = double(mnist.test_images(:,:,(mnist.test_labels==1) | (mnist.test_labels==8)));
-test_label = double(mnist.test_labels((mnist.test_labels==1) | (mnist.test_labels==8)));
+test = double(mnist.test_images(:,:,(mnist.test_labels==1) | (mnist.test_labels==7)));
+test_label = double(mnist.test_labels((mnist.test_labels==1) | (mnist.test_labels==7)));
 test_label(test_label==1) = -1;
-test_label(test_label==8) = 1;
+test_label(test_label==7) = 1;
 
 % normalize (makes it more efficient)
-train = (train)*2  / 255 -1;
-test  = (test)*2   / 255 -1;
+train = gpuArray((train)*2  / 255 -1);
+test  = gpuArray((test)*2   / 255 -1);
+% train_label = gpuArray(train_label);
+% test_label  = gpuArray(test_label);
 
-errors = [];
+train = reshape(train,784,length(train));
+test  = reshape(test,784,length(test));
+
+errors  = [];
+correct = [];
+test_err = [];
 converged = false;
 iter = 0;
 tic
 disp(['Starting at ', datestr(rem(now,1))])
+% transform rest to GPU
+bias = gpuArray(bias);
+% train_label = gpuArray(train_label);
+t = gpuArray(t);
 
+
+%print initial performance
+mlp_predict_GPU(w, bias, test, test_label)
+
+tic
 while(~converged && iter ~= max_iter)
     iter = iter + 1;
     total_err = 0;
-    for u = 1:length(train)/100
-        % forward step
-        img = reshape(train(:,:,u),1,784)';                % get input image
-        y.h_out(:,1)  = tanh(w.in * img + bias);                 % calulate output for first layer
-        for h = 1:layers-1
-            y.h_out(:,h+1) = tanh(w.h(:,:,h)* y.h_out(:,h) + bias);         % calculate output of that hidden layer
+%     tic 
+    starttime = tic;
+    
+    for u = 1:length(train)
+         % forward step
+        
+        img = train(:,u);          % get input image
+        x{1}  = tanh(w{1} * img + bias);             % calulate output for first layer
+        for k = 2:layers
+            x{k} = tanh( w{k}* x{k-1} + bias);       % calculate output of that hidden layer
         end
-        y.o_out   =  tanh(w.out * y.h_out(:,end) + bias);                % calulate final output
-        err = 0.5 * (train_label(u) - y.o_out).^2;
+        err = 0.5 * (train_label(u) - gather(x{end})).^2;
         total_err = total_err +  sum(err);
-
-        % backpropagation
-        d.out = (y.o_out-t(u)) .* (1-tanh(y.o_in).^2);     % calculate delta for output neuron ERROR/dx * ACTIVATION/dx 
-        w.out = w.out - (eta * d.out * y.h_out(:,end)');
         
-        
-        for h = layers-1:-1:1
-              if h == layers - 1
-                 d.h(:,h) = (w.out' * d.out) .*(1-tanh(y.h_out(:,h)).^2);
-              else
-                 d.h(:,h) = (w.h(:,:,h)' * d.h(:,h+1)) .*(1-tanh(y.h_out(:,h)).^2);
-              end
-              w.h(:,:,h) = w.h(:,:,h) - eta * d.h(:,h) *  y.h_out(:,h)';
+%         backpropagation
+        d{end} = (x{end}-t(u)) .* (1-tanh(w{end}*x{end-1}).^2);  
+        w{end}  = w{end} - (eta * d{end} * x{end}');
+        for k = layers-1:-1:2
+            d{k} = w{k+1}' * d{k+1} .* (1-tanh(w{k}*x{k-1}).^2);
+            w{k} = w{k} - eta * d{k}*x{k-1}';
         end
-        
-        if layers == 1
-            d.in = (w.out' * d.out) .* (1-tanh(img).^2);
-        else
-            d.in =     w.in' * d.h(:,1) .* (1-tanh(img).^2);
-        end
-        
-        w.in = w.in - eta * d.in * img';
+        d{1} = w{2}' * d{2} .* (1-tanh(w{1}*img).^2);
+        w{1} = w{1} - eta * d{1}*img';
 
     end
-    errors(iter) = gather(total_err);
-    if iter > 10 && var(errors(end-4:end)) < eta*eta; converged = 1; end
-    disp(['iteration ', num2str(iter), ', Err: ', num2str(total_err)])%, ', Predict: ' , num2str(mlp_predict(w.in,w.h,w.out, test, test_label))])
-    if mod(iter,10) == 0; disp([', Predict: ' , num2str(mlp_predict(w.in,w.h,w.out, test, test_label))]);end
+    
+    errors(iter)   = gather(total_err);
+    [correct(iter), test_err(iter)]  = mlp_predict_GPU(w, bias, test, test_label);
+    
+    disp(['#', num2str(iter), ', Err: ', num2str(errors(iter)/length(train)),', Test-Err: ',num2str(test_err(iter)/length(test)), ', Predict: ' , num2str(correct(iter)), ', Time: ', num2str(int32(toc(starttime))),'s'])
+
 end
 
 endtime = toc;
-% corr = mlp_predict(w.in, w.h, w.out, test, test_label);
-disp(['Total correct: ', sprintf('%.2f',corr) , '%, Runtime: ', sprintf('%.3f',endtime/60),' min'])
+disp([sprintf('%.2f',endtime/60),' min'])
 
 
 % save current workspace w/o mnist
-name = [num2str(layers), '-',num2str(neurons_h),'-', num2str(eta),' - ',num2str(iter),' - ', num2str(errors(end)),' - ',sprintf('%.2f',corr),'.mat'];
-save( name, '-regexp','^(?!(test_label|test|train|train_label|mnist|t)$).')
+name = [num2str(layers), '-',num2str(neurons_h),'-', num2str(eta),' - ',num2str(iter),' - ', num2str(errors(end)),' - ',num2str(test_err(iter)), ' - ',sprintf('%.2f',max(correct)),'.mat'];
+save( name, '-regexp','^(?!(test_label|test|train|train_label|mnist|t|d|x|img)$).')
 % disp('end')
+disp(['Finished at ', datestr(rem(now,1))])
