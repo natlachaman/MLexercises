@@ -1,18 +1,19 @@
 % cls
-close all
+function [correct, test_err, train_err, runtime] = MLP(layers, eta, neurons_h, max_iter, GPU)
+t_start = tic;
 load('mnistAll.mat')
-rng(42)
+rng(40)
 % settings
-GPU = 0;
+% GPU = 0;
 
 % define parameters
-eta = 0.0005;                % learning rate
-layers = 2;                  % # layers  =(hidden layers + 1)
-neurons_h = 5;             % # neurons per hidden layer
+% eta = 0.00005;                % learning rate
+% layers = 2;                  % # layers  =(hidden layers + 1)
+% neurons_h = 1;             % # neurons per hidden layer
 neurons_in = 784;            % # input neurons
 neurons_out = 1;             % # output neurons
-max_iter = 10000;             % # iterate for so long
-bias = 0;
+% max_iter = 10000;             % # iterate for so long
+bias = -1;
 assert(layers>0);            % layers must be at least 1
 class_1  = 4;
 class_2  = 9;
@@ -66,14 +67,14 @@ test_err = [];
 converged = false;
 iter = 0;
 tic
-disp(['Starting at ', datestr(rem(now,1))])
+% disp(['Starting at ', datestr(rem(now,1))])
 % transform rest to GPU
 bias = bias;
 % train_label = gpuArray(train_label);
 t = t;
 
 if GPU
-    disp('Using GPU...')
+%     disp('Using GPU...')
     bias=gpuArray(bias); t=gpuArray(t); 
     test=gpuArray(test); train=gpuArray(train);
     for k = 1:layers
@@ -82,12 +83,12 @@ if GPU
         x{k}=gpuArray(x{k}); 
     end
 else
-    disp('Using CPU...');
+%     disp('Using CPU...');
 end
 
 
 %print initial performance
-mlp_predict_GPU(w, bias, test, test_label)
+% mlp_predict(w, bias, test, test_label);
 
 tic
 while(~converged && iter ~= max_iter)
@@ -96,7 +97,7 @@ while(~converged && iter ~= max_iter)
 %     tic 
     starttime = tic;
     
-    for u = 1:length(train)/10
+    for u = 1:length(train)
          % forward step
         
         img = train(:,u);          % get input image
@@ -120,18 +121,23 @@ while(~converged && iter ~= max_iter)
     end
     
     errors(iter)   = gather(total_err);
-    [correct(iter), test_err(iter)]  = mlp_predict_GPU(w, bias, test, test_label);
+    [correct(iter), test_err(iter)]  = mlp_predict(w, bias, test, test_label);
     
-    disp(['#', num2str(iter), ', Err: ', num2str(errors(iter)/length(train)),', Test-Err: ',num2str(test_err(iter)/length(test)), ', Predict: ' , num2str(correct(iter)), ', Time: ', num2str(int32(toc(starttime))),'s'])
+%     disp(['#', num2str(iter), ', Err: ', num2str(errors(iter)/length(train)),', Test-Err: ',num2str(test_err(iter)/length(test)), ', Predict: ' , num2str(correct(iter)), ', Time: ', num2str(int32(toc(starttime))),'s'])
 
 end
 
 endtime = toc;
-disp([sprintf('%.2f',endtime/60),' min'])
+% disp([sprintf('%.2f',endtime/60),' min'])
 
 
 % save current workspace w/o mnist
 name = [num2str(layers), '-',num2str(neurons_h),'-', num2str(eta),' - ',num2str(iter),' - ', num2str(errors(end)),' - ',num2str(test_err(iter)), ' - ',sprintf('%.2f',max(correct)),'.mat'];
 save( name, '-regexp','^(?!(test_label|test|train|train_label|mnist|t|d|x|img)$).')
 % disp('end')
-disp(['Finished at ', datestr(rem(now,1))])
+% disp(['Finished at ', datestr(rem(now,1))])
+runtime = toc(t_start);
+train_err = errors(end);
+test_err  = test_err(end);
+correct = correct(end);
+end
