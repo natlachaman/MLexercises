@@ -3,7 +3,7 @@ close all
 load('mnistAll.mat')
 rng(42)
 % define parameters
-eta = 0.00001;                % learning rate
+eta = 0.00005;                % learning rate
 layers = 2;                  % # layers  =(hidden layers + 1)
 neurons_h = 1;             % # neurons per hidden layer
 neurons_in = 784;            % # input neurons
@@ -11,6 +11,8 @@ neurons_out = 1;             % # output neurons
 max_iter = 100;             % # iterate for so long
 bias = 0;
 assert(layers>0);            % layers must be at least 1
+class_1  = 4;
+class_2  = 9;
 
 % define weights matrixes
 w = cell(1,layers);
@@ -36,15 +38,15 @@ end
 d{end}  = gpuArray(zeros(neurons_out,1));
 
 % get train/test data
-train = double(mnist.train_images(:,:,(mnist.train_labels==1) | (mnist.train_labels==7)));
-train_label = double(mnist.train_labels((mnist.train_labels==1) | (mnist.train_labels==7)));
-train_label(train_label==1) = -1;
-train_label(train_label==7) = 1;
+train = double(mnist.train_images(:,:,(mnist.train_labels==class_1) | (mnist.train_labels==class_2)));
+train_label = double(mnist.train_labels((mnist.train_labels==class_1) | (mnist.train_labels==class_2)));
+train_label(train_label==class_1) = -1;
+train_label(train_label==class_2) = 1;
 t = train_label;
-test = double(mnist.test_images(:,:,(mnist.test_labels==1) | (mnist.test_labels==7)));
-test_label = double(mnist.test_labels((mnist.test_labels==1) | (mnist.test_labels==7)));
-test_label(test_label==1) = -1;
-test_label(test_label==7) = 1;
+test = double(mnist.test_images(:,:,(mnist.test_labels==class_1) | (mnist.test_labels==class_2)));
+test_label = double(mnist.test_labels((mnist.test_labels==class_1) | (mnist.test_labels==class_2)));
+test_label(test_label==class_1) = -1;
+test_label(test_label==class_2) = 1;
 
 % normalize (makes it more efficient)
 train = gpuArray((train)*2  / 255 -1);
