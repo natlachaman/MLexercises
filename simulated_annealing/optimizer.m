@@ -86,13 +86,6 @@ case 'iter'
 	xlabel('Iteration')
 	ylabel('Min Energy')
 
-% 	plot(E_min_all)
-% 	xlabel('Restart')
-% 	ylabel('Min Energy')
-% 	plot(tx)
-% 	xlabel('Iterations')
-% 	ylabel('Termination Time')
-
 
 case 'sa'
 	% initialize
@@ -101,7 +94,8 @@ case 'sa'
 	E1 = E(x,w);
 	E_outer=zeros(1,100);	%stores mean energy at each temperature
 	E_bar=zeros(1,100);		% stores std energy at each temperature
-    accept_all=[];
+
+
 	% initialize temperature
 	max_dE=0;
 	switch NEIGHBORHOODSIZE,
@@ -135,14 +129,15 @@ case 'sa'
         end;
 
 	beta_init=1/max_dE;	% sets initial temperature
-	T1=1000; % length markov chain at fixed temperature
+	T1=10000; % length markov chain at fixed temperature
 	factor=1.05 ; % increment of beta at each new chain
 
-	beta=beta_init;
+	beta=0.05; %
 	E_bar(1)=1;
 	t2=1;
 	Beta_all=[beta];
 	HeatCapacity_all=[];
+	delta_all=[];
 	while E_bar(t2) > 0,
 	    C=beta^2 * E_bar(t2);
 	    HeatCapacity_all=[HeatCapacity_all C];
@@ -150,6 +145,7 @@ case 'sa'
 		beta=beta*factor;
 		Beta_all=[Beta_all beta];
 		E_all=zeros(1,T1);
+
 		for t1=1:T1,
 			switch NEIGHBORHOODSIZE,
 			case 1,
@@ -163,14 +159,14 @@ case 'sa'
                 if (delta < 0)
                     x=x_new;                   %accept x_new
                     E1=E1+Delta;
-                    accept_all=[accept_all 1];
+                    delta_all=[delta_all Delta];
                 else
                     if (rand< exp(-delta))     %accept x_new with probability exp -delta
                         x=x_new;
                         E1=E1+Delta;
-                        accept_all=[accept_all 1];
+                        delta_all=[delta_all Delta];
                     else
-                        accept_all=[accept_all 0];
+%                         delta_all=[delta_all 0];
                     end
                 end;
 			case 2,
@@ -192,31 +188,36 @@ case 'sa'
                 if (delta < 0)
                     x=x_new;                   %accept x_new
                     E1=E1+Delta;
-                    accept_all=[accept_all 1];
+                    delta_all=[delta_all Delta];
                 else
                     if (rand< exp(-delta))     %accept x_new with probability exp -delta
                         x=x_new;
                         E1=E1+Delta;
-                        accept_all=[accept_all 1];
+                        delta_all=[delta_all Delta];
                     else
-                        accept_all=[accept_all 0];
+%                         delta_all=[delta_all 0];
                     end
                 end;
 			end;
 			% E1 is energy of new state
 			E_all(t1)=E1;
 		end;
+		imagesc(reshape(x,[grid_x,n/grid_x])');
+        xlabel(sprintf('T = %0.2f, E = %0.2f', 1/beta,  E1/n));
+        drawnow;
 		E_outer(t2)=mean(E_all);
 		E_bar(t2)=std(E_all);
 		[t2 beta E_outer(t2) E_bar(t2)] % observe convergence
 	end;
 	E_min=E_all(1) % minimal energy
-
-% 	plot(Beta_all,E_outer(1:t2),Beta_all,E_bar(1:t2))
-% 	plot(1:t2,E_outer(1:t2),1:t2,E_bar(1:t2))
-	plot(HeatCapacity_all)
-	xlabel('Temp')
-	ylabel('Energy')
+    errorbar(Beta_all.^-1,E_outer(1:t2)/n,E_bar(1:t2)/n,'-.k.')
+%     plot(Beta_all.^-1,E_bar(1:t2)/n)
+	set(gca,'xscale','log')
+    xlim([0,20]);
+	xlabel('Temperature');
+% 	ylabel('sd of Energy');
+	ylabel('Energy per spin');
+	title('Triangular Lattice Ising Frustrated');
 end;
 
 
