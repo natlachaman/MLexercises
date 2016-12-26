@@ -5,7 +5,7 @@ import multiprocessing as mp
 import matplotlib.pyplot as plt
 import seaborn
 
-from BM_MF_MNIST import BoltzmannMachine
+from BM import BoltzmannMachine
 
 
 def training(clfs, C):
