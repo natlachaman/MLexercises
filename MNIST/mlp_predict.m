@@ -1,31 +1,29 @@
 % correct = mlp_predict(w_in,w_h,w_out, test, labels)
-function correct = mlp_predict(w_in,w_h,w_out, test, labels)
-
-    layers = size(w_h,3);
-    neurons_h   = length(w_h);
-    neurons_out = size(w_out, 1);
-
-    y.h_in   = gpuArray(zeros(neurons_h,layers));    % what comes in to each layer
-    y.h_out  = gpuArray(zeros(neurons_h,layers));    % what comes out of each layer
-    y.o_in   = gpuArray(zeros(neurons_out));         % final output neuron(s)
-    y.o_out  = gpuArray(zeros(neurons_out));         % final output neuron(s)
-    correct  = gpuArray(zeros(1,length(test)));
-    bias     = -1;
+function [correct, test_err] = mlp_predict(w, bias, test, labels)
+    layers      = length(w);
+    neurons_h   = length(w{1});
+    neurons_out = size(w{end}, 1);
+    x           = cell(1,layers);
+    test_err    = 0;
+    
+    for k = 1:layers-1
+       x{k}  = zeros(neurons_h,1,class(bias));    % what comes out of each layer
+    end
+    x{end}  = zeros(neurons_out,1,class(bias));         % final output neuron(s)
+    correct = zeros(length(test),1,class(bias));
     
     for u = 1:length(test)
-        
-        img = reshape(test(:,:,u),1,784)';                % get input image
-        y.h_in(:,1)   = w_in * img;                       % calculate input of first layer
-        y.h_out(:,1)  = tanh(y.h_in(:,1) + bias);         % calulate output for first layer
-        
-        for h = 1:layers-1
-            y.h_in(:,h+1)  = w_h(:,:,h)* y.h_out(:,h);    % calculate input for layer h+1
-            y.h_out(:,h+1) = tanh(y.h_in(:,h+1) + bias);  % calculate output of that hidden layer
-        end
-        
-        y.o_in    =  w_out * y.h_out(:,end);
-        y.o_out   =  tanh(y.o_in + bias);                 % calulate final output
-        correct(u) = sign(y.o_out)==labels(u,:)    ;              % was our prediction correct?
+        % forward step
+        tic
+        img = test(:,u);           % get input image
+        x{1}  = tanh(w{1} * img + bias);             % calulate output for first layer
+        for k = 2:layers
+            x{k} = tanh( w{k}* x{k-1} + bias);       % calculate output of that hidden layer
+        end   
+        err = 0.5 * (labels(u) - gather(x{end})).^2;
+        test_err = test_err + sum(err);
+        correct(u) = sign(gather(x{end}))==labels(u,:)    ;              % was our prediction correct?
     end
-    correct = 100*sum(correct)/length(test);
+    test_err = gather(test_err);
+    correct  = gather(100*sum(correct)/length(test));
 end
