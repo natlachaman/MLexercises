@@ -9,28 +9,24 @@ from BM import BoltzmannMachine
 
 
 def sigmoid(x):
-    return 1 / (1 + np.exp(-x))
+    return 1. / (1 + np.exp(-x))
 
 
-def training(clfs, C):
+def training(clfs):
 
-    # parallelize training
-    processes = [mp.Process(target=clfs[c].mean_field, args=()) for c in range(C)]
+    # train every classifier
+    for c in clfs:
+        c.mean_field()
 
-    # start processes
-    for p in processes:
-        p.start()
+    # get validation accuracy for each
+    accuracy = []
+    for c in clfs:
+        sig = sigmoid(np.vstack(c.val_p))
+        hits = np.array(sig > 0.5)
+        # print hits
+        accuracy.append(np.mean(hits))
 
-    # join BMs' outputs
-    for p in processes:
-        p.join()
-
-    # get validation accuracy for every clf
-    accuracy = [c.queue.get() for c in clfs]
-
-    # todo: plot acc
     return accuracy
-
 
 def classify(clfs, ytest):
 
@@ -39,8 +35,8 @@ def classify(clfs, ytest):
     for c in clfs:
         p = c.predict('test')
         P.append(p)
-    sig = sigmoid(np.vstack(P).T)
-    # sig = np.vstack(P).T
+    # sig = sigmoid(np.vstack(P).T)
+    sig = np.vstack(P).T
     cl = np.argmax(sig, axis=1)[:, None]
     hits = np.array(cl == ytest, dtype=np.int32)
     accuracy = np.mean(hits)
@@ -51,8 +47,9 @@ def classify(clfs, ytest):
 
 def add_noise(data, thrs):
     r, c = data.shape
-    noise = np.random.rand(r, c) - np.random.rand(r, c)
+    noise = np.random.rand(r, c)
     mask = np.array([noise < thrs], dtype=np.float32)
+
     return np.squeeze(np.abs(data - mask))
 
 
@@ -103,8 +100,8 @@ if __name__ == '__main__':
         ntrain = xtrain.shape[-1]
 
         xtrain = xtrain.T.reshape(ntrain, -1) / 255.
-        xtrain = np.array(xtrain > 0.5, dtype=np.float32)
-        xtrain = add_noise(xtrain, 0.1)
+        xtrain_ = np.array(xtrain > 0.5, dtype=np.float32)
+        xtrain = add_noise(xtrain_, 0.1)
 
         ytrain = np.squeeze(ytrain)
 
@@ -120,16 +117,34 @@ if __name__ == '__main__':
         xtest = np.array(xtest > 0.5, dtype=np.float32)
         ytest = ytest[split:]
 
+        # # plot input and noisy input
+        # plt.figure()
+        # plt.subplot(2,1,1)
+        # plt.imshow(xtrain_[105].reshape(28,28).T)
+        # plt.subplot(2,1,2)
+        # plt.imshow(xtrain[105].reshape(28,28).T)
+        # plt.show()
+
         # create classifiers
         clfs = []
         for c in range(C):
             clfs.append(BoltzmannMachine(xtrain[ytrain == c, :], xval[yval == c, :], xtest))
 
         # train them
-        accuracy = training(clfs, C)
+        acc = training(clfs)
+        print acc
+
+        # # plot mean firing rate and linear response
+        # plt.figure()
+        # plt.subplot(2,1,1)
+        # plt.imshow(clfs[7].mi.reshape(28, 28).T)
+        # plt.subplot(2,1,2)
+        # plt.imshow(clfs[7].Xij)
+        # plt.colorbar()
+        # plt.show()
 
         # test them
-        classify(clfs, ytest)
+        # classify(clfs, ytest)
 
     else:
         raise Exception('Not a valid data set. Try either "random" or "MINIST"')
