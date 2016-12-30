@@ -2,7 +2,7 @@ import numpy as np
 import multiprocessing as mp
 
 
-class BoltzmannMachine():
+class BoltzmannMachine:
 
     def __init__(self, train, val=None, test=None, eta=1e-3, K=200, T=500):
         self.train = train
@@ -20,18 +20,19 @@ class BoltzmannMachine():
     def mean_field(self):
 
         # clamped statistics
-        Si_c = np.mean(self.train, axis=1)
-        Sij_c = np.dot(self.train, self.train.T) / self.train.shape[0]
+        Si_c = np.mean(self.train, axis=0)
+        Sij_c = np.dot(self.train.T, self.train) / self.train.shape[0]
 
-        # mean field equations
+        # mean field equations (with no hidden neurons)
         mi = Si_c # mean firing rate
         C = Sij_c - np.dot(mi.T, mi)
+        np.fill_diagonal(C, 1 - mi ** 2) # add diagonal correction on X_ii
         Xij = np.linalg.inv(C) # linear response
-        Xij = np.fill_diagonal(Xij, 1 - mi ** 2) # add diagonal correction on X_ii
 
         # compute w and theta
-        self.w = np.eye(Xij) * (1. / (1 - m ** 2)) - Xij
-        self.theta = np.arctan(mi) - np.dot(self.w, mi)
+        # self.w = (1. / (1 - mi ** 2)) * np.eye(len(Xij)) - Xij
+        self.w = - Xij
+        self.theta = np.arctanh(mi) - np.dot(self.w, mi)
 
         # validate results
         P = self.predict('val')
@@ -39,17 +40,17 @@ class BoltzmannMachine():
 
         # compute the mean field free energy F
         S = np.dot((1 + mi), np.log(0.5 * (1 + mi))) + np.dot((1 - mi), np.log(0.5 * (1 - mi)))
-        self.F = - 0.5 * np.dot(np.dot(mi.T, self.w), mi.T) - np.dot(self.theta, mi.T) + 0.5 * S
-
-        print('done')
+        self.F = (- 0.5 * np.dot(np.dot(mi.T, self.w), mi.T)) - np.dot(self.theta, mi) + 0.5 * S
+        print('F', self.F)
+        print('done training')
 
     def exact(self):
 
         N = self.train.shape[1]
 
         # clamped statistics
-        Si_c = np.mean(self.train, axis=1)
-        Sij_c = np.dot(self.train, self.train.T) / self.train.shape[0]
+        Si_c = np.mean(self.train, axis=0)
+        Sij_c = np.dot(self.train.T, self.train) / self.train.shape[0]
 
         # possible states between 2 neurons
         Si = np.array([1, 1, -1, -1])
@@ -101,10 +102,19 @@ class BoltzmannMachine():
 
         # compute p(s)for every sample
         P = []
-        for m in range(M):
-            Z = np.log(-self.F)
-            p = (1 / Z) * np.exp(0.5 * np.dot(np.dot(data[m, :], self.w), data[m, :].T) + np.dot(self.theta, data[m, :]))
+        i = 0
+        for m in range(len(data)):
+            Z = np.exp(-self.F)
+            # print(-self.F)
+            # print(Z)
+            p = (1 / Z) * np.exp(0.5 * np.dot(np.dot(data[m, :], self.w), data[m, :].T) + np.dot(self.theta, data[m, :].T))
+            # print(p)
             P.append(p)
+            # i += 1
+            # if i == 5:
+            #     exit()
+
+        print('done validating')
 
         return P
 
