@@ -1,9 +1,8 @@
 import scipy.io
 import numpy as np
-import multiprocessing as mp
 
 import matplotlib.pyplot as plt
-import seaborn
+import seaborn as sns
 
 from BM import BoltzmannMachine
 
@@ -21,12 +20,13 @@ def training(clfs):
     # get validation accuracy for each
     accuracy = []
     for c in clfs:
+        # sig = sigmoid(np.vstack(c.val_p))
         sig = sigmoid(np.vstack(c.val_p))
         hits = np.array(sig > 0.5)
-        # print hits
         accuracy.append(np.mean(hits))
 
     return accuracy
+
 
 def classify(clfs, ytest):
 
@@ -35,14 +35,24 @@ def classify(clfs, ytest):
     for c in clfs:
         p = c.predict('test')
         P.append(p)
-    # sig = sigmoid(np.vstack(P).T)
+
+    # calculate performance accuracy
     sig = np.vstack(P).T
-    cl = np.argmax(sig, axis=1)[:, None]
-    hits = np.array(cl == ytest, dtype=np.int32)
+    pred = np.argmax(sig, axis=1)[:, None]
+    hits = np.array(pred == ytest, dtype=np.int32)
     accuracy = np.mean(hits)
 
-    # todo: add classification plots
-    print 'Accuracy on test set: {}'.format(accuracy)
+    fig = plt.figure()
+    for j in range(10):
+        i = np.random.randint(0, len(ytest), 1)
+        plt.subplot(2, 5, j+1)
+        plt.imshow(xtest[i].reshape(28, 28).T)
+        sns.set_style("whitegrid", {'axes.grid': False})
+        plt.text(x=10.5, y=-3.0, s='true: ' + str(ytest[i][0, 0]),  color='blue')
+        plt.text(x=10.5, y=1.0, s='pred: ' + str(pred[i][0, 0]),  color='red')
+        plt.axis('off')
+    plt.show()
+    fig.savefig('predictions.png')
 
 
 def add_noise(data, thrs):
@@ -123,6 +133,7 @@ if __name__ == '__main__':
         # plt.imshow(xtrain_[105].reshape(28,28).T)
         # plt.subplot(2,1,2)
         # plt.imshow(xtrain[105].reshape(28,28).T)
+        # sns.set_style("whitegrid", {'axes.grid' : False})
         # plt.show()
 
         # create classifiers
@@ -132,7 +143,6 @@ if __name__ == '__main__':
 
         # train them
         acc = training(clfs)
-        print acc
 
         # # plot mean firing rate and linear response
         # plt.figure()
@@ -141,10 +151,11 @@ if __name__ == '__main__':
         # plt.subplot(2,1,2)
         # plt.imshow(clfs[7].Xij)
         # plt.colorbar()
+        # sns.set_style("whitegrid", {'axes.grid' : False})
         # plt.show()
 
         # test them
-        # classify(clfs, ytest)
+        classify(clfs, ytest)
 
     else:
         raise Exception('Not a valid data set. Try either "random" or "MINIST"')
