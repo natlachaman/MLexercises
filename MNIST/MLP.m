@@ -1,18 +1,19 @@
 % cls
-function [correct, test_err, train_err, runtime] = MLP(layers, eta, neurons_h, max_iter, GPU)
+function [correct, test_err, train_err, runtime,last_iter] = MLP(layers, eta, neurons_h, max_iter,momentum, GPU)
 t_start = tic;
 load('mnistAll.mat')
-rng(40)
+rng(18)
 % settings
 % GPU = 0;
+% momentum = 0.5;
 
 % define parameters
-% eta = 0.00005;                % learning rate
+% eta = 0.00005;               % learning rate
 % layers = 2;                  % # layers  =(hidden layers + 1)
-% neurons_h = 1;             % # neurons per hidden layer
-neurons_in = 784;            % # input neurons
-neurons_out = 1;             % # output neurons
-% max_iter = 10000;             % # iterate for so long
+% neurons_h = 10;              % # neurons per hidden layer
+neurons_in = 784;              % # input neurons
+neurons_out = 1;               % # output neurons
+% max_iter = 25000;            % # iterate for so long
 bias = -1;
 assert(layers>0);            % layers must be at least 1
 class_1  = 4;
@@ -64,17 +65,17 @@ test  = reshape(test,784,length(test));
 errors  = [];
 correct = [];
 test_err = [];
-converged = false;
+converged = 0;
 iter = 0;
-tic
-% disp(['Starting at ', datestr(rem(now,1))])
+
+disp(['Starting at ', datestr(rem(now,1))])
 % transform rest to GPU
 bias = bias;
 % train_label = gpuArray(train_label);
 t = t;
 
 if GPU
-%     disp('Using GPU...')
+    disp('Using GPU...')
     bias=gpuArray(bias); t=gpuArray(t); 
     test=gpuArray(test); train=gpuArray(train);
     for k = 1:layers
@@ -83,17 +84,18 @@ if GPU
         x{k}=gpuArray(x{k}); 
     end
 else
-%     disp('Using CPU...');
+    disp('Using CPU...');
 end
 
 
 %print initial performance
-% mlp_predict(w, bias, test, test_label);
+mlp_predict(w, bias, test, test_label)
 
 tic
 while(~converged && iter ~= max_iter)
     iter = iter + 1;
     total_err = 0;
+    
 %     tic 
     starttime = tic;
     
@@ -109,35 +111,42 @@ while(~converged && iter ~= max_iter)
         total_err = total_err +  sum(err);
         
 %         backpropagation
-        d{end} = (x{end}-t(u)) .* (1-tanh(w{end}*x{end-1}).^2);  
+        d{end} = (x{end}-t(u)) .* (1-tanh(w{end}*x{end-1}).^2) + momentum * d{end};  
         w{end}  = w{end} - (eta * d{end} * x{end}');
         for k = layers-1:-1:2
-            d{k} = w{k+1}' * d{k+1} .* (1-tanh(w{k}*x{k-1}).^2);
+            d{k} = w{k+1}' * d{k+1} .* (1-tanh(w{k}*x{k-1}).^2) + momentum * d{k};
             w{k} = w{k} - eta * d{k}*x{k-1}';
         end
-        d{1} = w{2}' * d{2} .* (1-tanh(w{1}*img).^2);
+
+        d{1} = w{2}' * d{2} .* (1-tanh(w{1}*img).^2) + momentum * d{1};
         w{1} = w{1} - eta * d{1}*img';
 
     end
-    
+
     errors(iter)   = gather(total_err);
     [correct(iter), test_err(iter)]  = mlp_predict(w, bias, test, test_label);
+   
+    if iter > 10
+        if sum( test_err(end-5:end)<mean(test_err(end-10:end-5))) == 0
+%             converged = 1;
+        end
+    end
     
-%     disp(['#', num2str(iter), ', Err: ', num2str(errors(iter)/length(train)),', Test-Err: ',num2str(test_err(iter)/length(test)), ', Predict: ' , num2str(correct(iter)), ', Time: ', num2str(int32(toc(starttime))),'s'])
+    disp(['#', num2str(iter), ', Err: ', num2str(errors(iter)/length(train)),', Test-Err: ',num2str(test_err(iter)/length(test)), ', Predict: ' , num2str(correct(iter)), ', Time: ', num2str(int32(toc(starttime))),'s'])
 
 end
-
 endtime = toc;
-% disp([sprintf('%.2f',endtime/60),' min'])
+disp([sprintf('%.2f',endtime/60),' min'])
 
 
 % save current workspace w/o mnist
 name = [num2str(layers), '-',num2str(neurons_h),'-', num2str(eta),' - ',num2str(iter),' - ', num2str(errors(end)),' - ',num2str(test_err(iter)), ' - ',sprintf('%.2f',max(correct)),'.mat'];
 save( name, '-regexp','^(?!(test_label|test|train|train_label|mnist|t|d|x|img)$).')
 % disp('end')
-% disp(['Finished at ', datestr(rem(now,1))])
-runtime = toc(t_start);
+disp(['Finished at ', datestr(rem(now,1))])
+runtime   = toc(t_start);
 train_err = errors(end);
 test_err  = test_err(end);
-correct = correct(end);
+correct   = correct(end);
+last_iter =  iter;
 end
