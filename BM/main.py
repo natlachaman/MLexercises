@@ -61,10 +61,10 @@ def add_noise(data, thrs):
 
 if __name__ == '__main__':
 
-    print(''' which exercise do you want to run? \n
+    print(''' Which exercise would you like to run? \n
                 Type key name: \n
-                * random : classify randomly generated dataset with BM computing the exact solution \n
-                * MNIST : classify MNIST dataset with 10 different BMs using mean field estimation \n
+                * random : to classify a randomly generated data set with BM computing the exact solution \n
+                * MNIST : to classify MNIST dataset with 10 different BMs using mean field estimation \n
           ''')
 
     opt = True
@@ -96,7 +96,7 @@ if __name__ == '__main__':
             plt.show()
             fig.savefig('changeW_vs_iter.png')
 
-            print('''What would you like to do know?\n
+            print('''What would you like to do now?\n
                      Type key name:\n
                      * random : to run this exercise again\n
                      * MNIST : to run BM on MNIST data set\n
@@ -162,7 +162,7 @@ if __name__ == '__main__':
             # test them
             classify(clfs, ytest)
 
-            print('''What would you like to do know?\n
+            print('''What would you like to do now?\n
                      Type key name:\n
                      * MNIST : to run this exercise again\n
                      * random : to run BM on a randomly generated data set\n
