@@ -10,7 +10,7 @@ momentum = 0.0;
 % define parameters
 eta = 0.001;                 % learning rate
 layers = 3;                  % # layers  =(hidden layers + 1)
-neurons_h = 10;              % # neurons per hidden layer
+neurons_h = 5;              % # neurons per hidden layer
 neurons_in = 784;              % # input neurons
 neurons_out = 1;               % # output neurons
 max_iter = 100;            % # iterate for so long
@@ -45,11 +45,11 @@ d{end}  = zeros(neurons_out,1);
 
 % define gradient memory
 m = cell(1,layers);
-m{1}  = zeros(neurons_h,neurons_in);
+m{1}  = ones(neurons_h,neurons_in);
 for k = 2:layers
-   m{k}  = zeros(neurons_h,neurons_h);
+   m{k}  = ones(neurons_h,neurons_h);
 end
-m{end} = zeros(neurons_out,neurons_h);
+m{end} = ones(neurons_out,neurons_h);
 
 % get train/test data
 train = double(mnist.train_images(:,:,(mnist.train_labels==class_1) | (mnist.train_labels==class_2)));
@@ -131,23 +131,31 @@ while(~converged && iter ~= max_iter)
         total_err = total_err +  sum(err);
         
 %         backpropagation
+
         d{end} = (x{end}-t(u)) .* (1-tanh(w{end}*x{end-1}).^2) ; 
-        beta   = ((eta * d{end} * x{end-1}') - m{end} .* (eta * d{end} * x{end-1}'))./(norm(m{end})^2);
-        m{end} =  (eta * d{end} * x{end-1}');% + beta*d;
+        m_new_out  = eta * d{end} * x{end-1}';
+        beta   = ((m_new_out - m{end}) * m_new_out')./(m{end}*m{end}');
+        m{end} = (eta * d{end} * x{end-1}') + beta*m{end};
+        w{end} = w{end} + m{end};
         
-        w{end} = w{end} - m{end};
 %         disp(w{end})
         for k = layers-1:-1:2
             d{k} = w{k+1}' * d{k+1} .* (1-tanh(w{k}*x{k-1}).^2) ;
-            beta   = ((eta * d{k}*x{k-1}') - m{k} .* (eta * d{k}*x{k-1}'))./(norm(m{k})^2);
-            m{k} = (eta * d{k}*x{k-1}') + beta * m{k};
-            w{k} = w{k} - m{k};
+            m_new_h = eta * d{k}*x{k-1}';
+            beta   = (m_new_h - m{k} .* m_new_h')./(m{k}*m{k}');
+            beta = beta(logical(eye(5)));
+            beta = repmat(beta,1,5);
+            m{k} = (eta * d{k}*x{k-1}') + beta .* m{k};
+            w{k} = w{k} + m{k};
         end
 
         d{1} = w{2}' * d{2} .* (1-tanh(w{1}*img).^2) ;
-        beta   = (eta * d{1}*img') - m{1} .* (eta * d{1}*img') ./ (norm(m{1})^2);
-        m{1} = eta * d{1}*img' + beta*m{1};
-        w{1} = w{1} - m{1};
+        m_new_in = eta * d{1}*img';
+        beta   = ((m_new_in - m{1}) * m_new_in')./ (norm(m{1})^2);
+        beta = beta(logical(eye(5)));
+        beta = repmat(beta,1,784);
+        m{1} = eta * d{1}*img' + beta.*m{1};
+        w{1} = w{1} + m{1};
     end
     acc = acc / length(train);
     errors(iter)   = gather(total_err);
