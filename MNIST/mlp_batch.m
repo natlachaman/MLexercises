@@ -1,24 +1,25 @@
 % cls
-function [correct, test_err, train_err, runtime, last_iter] = MLP(layers, eta, neurons_h, max_iter,momentum, GPU)
-
+% function [correct, test_err, train_err, runtime,last_iter] = MLP(layers, eta, neurons_h, max_iter,momentum, GPU)
+t_start = tic;
 load('mnistAll.mat')
 rng(18)
 % settings
-% GPU = 0;
-% momentum = 0.75;
+GPU = 0;
+momentum = 0.00;
 
 % define parameters
-% eta = 0.001;               % learning rate
-% layers = 2;                  % # layers  =(hidden layers + 1)
-% neurons_h = 10;              % # neurons per hidden layer
+eta = 0.001;               % learning rate
+layers = 3;                  % # layers  =(hidden layers + 1)
+neurons_h = 100;              % # neurons per hidden layer
 neurons_in = 784;              % # input neurons
 neurons_out = 1;               % # output neurons
-% max_iter = 25000;            % # iterate for so long
+max_iter = 250;            % # iterate for so long
 bias = -1;
-assert(layers>1);            % layers must be at least 2
+assert(layers>0);            % layers must be at least 1
 class_1  = 4;
 class_2  = 9;
-randomize=0;
+randomized = 1;
+batch_size = 2;
 
 % define weights matrixes
 w = cell(1,layers);
@@ -43,13 +44,14 @@ for k = 1:layers-1
 end
 d{end}  = zeros(neurons_out,1);
 
-% define gradient memory
+% define weights memory
 m = cell(1,layers);
 m{1}  = zeros(neurons_h,neurons_in);
 for k = 2:layers
    m{k}  = zeros(neurons_h,neurons_h);
 end
 m{end} = zeros(neurons_out,neurons_h);
+
 
 % get train/test data
 train = double(mnist.train_images(:,:,(mnist.train_labels==class_1) | (mnist.train_labels==class_2)));
@@ -96,18 +98,11 @@ else
     disp('Using CPU...');
 end
 
-if randomize==1
-    ordering = randperm(length(train));
-    train = train(:, ordering);
-    train_label = train_label(ordering);
-end
-
 
 %print initial performance
 mlp_predict(w, bias, test, test_label)
 eta_0 = eta;
 tic
-t_start = tic;
 while(~converged && iter ~= max_iter)
     iter = iter + 1;
     total_err = 0;
@@ -133,24 +128,32 @@ while(~converged && iter ~= max_iter)
         err = 0.5 * (train_label(u) - gather(x{end})).^2;
         total_err = total_err +  sum(err);
         
-%         backpropagation
-        d{end} = (x{end}-t(u)) .* (1-tanh(w{end}*x{end-1}).^2) ;  
-        m{end} =  (eta * d{end} * x{end}') + m{end} * momentum;
-        w{end}  = w{end} - m{end};
+%       backpropagation
+        d{end} = (x{end}-t(u)) .* (1-tanh(w{end}*x{end-1}).^2) + momentum * d{end};  
+        m{end} =  m{end} + (d{end} * x{end}');
+        if mod(u, batch_size) == 0
+            w{end} = w{end} - (eta) * m{end};
+            m{end} = zeros(neurons_out, neurons_h);
+        end
         for k = layers-1:-1:2
-            d{k} = w{k+1}' * d{k+1} .* (1-tanh(w{k}*x{k-1}).^2) ;
-            m{k} = eta * d{k}*x{k-1}' + m{k} * momentum;
-            w{k} = w{k} - m{k};
+            d{k} = w{k+1}' * d{k+1} .* (1-tanh(w{k}*x{k-1}).^2) + momentum * d{k};
+            m{k} = m{k} + d{k} * x{k-1}';
+            if mod(u, batch_size) == 0
+                w{k} = w{k} - (eta) * m{k};
+                m{k} = zeros(neurons_h, neurons_h);
+            end
         end
 
-        d{1} = w{2}' * d{2} .* (1-tanh(w{1}*img).^2) ;
-        m{1} = eta * d{1}*img' + m{1} * momentum;
-        w{1} = w{1} - m{1};
-
+        d{1} = w{2}' * d{2} .* (1-tanh(w{1}*img).^2) + momentum * d{1};
+        m{1} = m{1} + d{1} * img';
+        if mod(u, batch_size) == 0
+            w{1} = w{1} - (eta) * m{1};
+            m{1} = zeros(neurons_h, neurons_in);
+        end
     end
     acc = acc / length(train);
     errors(iter)   = gather(total_err);
-    [correct(iter), test_err(iter)]  = mlp_predict(w, bias, test, test_label);
+    [correct(iter), test_err(iter)]  = mlp_predict(w, bias, train, train_label);
    
     if iter > 10
         if sum( test_err(end-5:end)<mean(test_err(end-10:end-5))) == 0
@@ -171,7 +174,8 @@ save( name, '-regexp','^(?!(test_label|test|train|train_label|mnist|t|d|x|img)$)
 % disp('end')
 disp(['Finished at ', datestr(rem(now,1))])
 runtime   = toc(t_start);
-train_err = errors;
-correct   = correct;
+train_err = errors(end);
+test_err  = test_err(end);
+correct   = correct(end);
 last_iter =  iter;
-end
+% end
