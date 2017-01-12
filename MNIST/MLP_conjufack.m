@@ -1,23 +1,23 @@
 % cls
-function [correct, test_err, train_err, runtime, last_iter] = mlp_batch(layers, eta, neurons_h, max_iter,batch_size,momentum, GPU)
+% function [correct, test_err, train_err, runtime, last_iter] = MLP(layers, eta, neurons_h, max_iter, momentum, GPU)
 
 load('mnistAll.mat')
 rng(18)
 % settings
-% GPU = 0;
-% momentum = 0.75;
+GPU = 0;
+momentum = 0.0;
 
 % define parameters
-% eta = 0.001;               % learning rate
-% layers = 2;                  % # layers  =(hidden layers + 1)
-% neurons_h = 10;              % # neurons per hidden layer
+eta = 0.001;                 % learning rate
+layers = 3;                  % # layers  =(hidden layers + 1)
+neurons_h = 10;              % # neurons per hidden layer
 neurons_in = 784;              % # input neurons
 neurons_out = 1;               % # output neurons
-% max_iter = 25000;            % # iterate for so long
+max_iter = 100;            % # iterate for so long
 bias = -1;
 assert(layers>1);            % layers must be at least 2
-class_1  = 4;
-class_2  = 9;
+class_1   = 4;
+class_2   = 9;
 randomize = 0;
 
 % define weights matrixes
@@ -96,11 +96,7 @@ else
     disp('Using CPU...');
 end
 
-if randomize==1
-    ordering = randperm(length(train));
-    train = train(:, ordering);
-    train_label = train_label(ordering);
-end
+
 
 
 %print initial performance
@@ -115,10 +111,11 @@ while(~converged && iter ~= max_iter)
 %     tic 
     starttime = tic;
     acc = 0;
-    if randomize
-        ordering = randperm(length(train));
-        train = train(:, ordering);
-    end
+	if randomize==1
+		ordering = randperm(length(train));
+		train = train(:, ordering);
+		train_label = train_label(ordering);
+	end
     
     for u = 1:length(train)
          % forward step
@@ -134,29 +131,23 @@ while(~converged && iter ~= max_iter)
         total_err = total_err +  sum(err);
         
 %         backpropagation
-        d{end} = (x{end}-t(u)) .* (1-tanh(w{end}*x{end-1}).^2) ;  
-        m{end} =  (eta * d{end} * x{end}') + m{end} * momentum + m{end};
-        if mod(u, batch_size) == 0
-            w{end}  = w{end} - m{end};
-            m{end} = zeros(neurons_out,neurons_h);
-        end
+        d{end} = (x{end}-t(u)) .* (1-tanh(w{end}*x{end-1}).^2) ; 
+        beta   = ((eta * d{end} * x{end-1}') - m{end} .* (eta * d{end} * x{end-1}'))./(norm(m{end})^2);
+        m{end} =  (eta * d{end} * x{end-1}');% + beta*d;
         
+        w{end} = w{end} - m{end};
+%         disp(w{end})
         for k = layers-1:-1:2
             d{k} = w{k+1}' * d{k+1} .* (1-tanh(w{k}*x{k-1}).^2) ;
-            m{k} = eta * d{k}*x{k-1}' + m{k} * momentum + m{k};
-            if mod(u, batch_size) == 0
-               w{k} = w{k} - m{k};
-               m{k} = zeros(neurons_h,neurons_h);
-            end
+            beta   = ((eta * d{k}*x{k-1}') - m{k} .* (eta * d{k}*x{k-1}'))./(norm(m{k})^2);
+            m{k} = (eta * d{k}*x{k-1}') + beta * m{k};
+            w{k} = w{k} - m{k};
         end
 
         d{1} = w{2}' * d{2} .* (1-tanh(w{1}*img).^2) ;
-        m{1} = eta * d{1}*img' + m{1} * momentum + m{1};
-        if mod(u, batch_size) == 0
-            w{1} = w{1} - m{1};
-            m{1} = zeros(neurons_h,neurons_in);
-        end
-
+        beta   = (eta * d{1}*img') - m{1} .* (eta * d{1}*img') ./ (norm(m{1})^2);
+        m{1} = eta * d{1}*img' + beta*m{1};
+        w{1} = w{1} - m{1};
     end
     acc = acc / length(train);
     errors(iter)   = gather(total_err);
@@ -184,4 +175,4 @@ runtime   = toc(t_start);
 train_err = errors;
 correct   = correct;
 last_iter =  iter;
-end
+% end

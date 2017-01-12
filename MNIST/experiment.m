@@ -13,7 +13,7 @@ iter      = 0;
 % for i = 1:length(momentum)
 %     disp(i)
 %     disp('//////////////////////////////////////')
-    [correct, test_err, train_err, runtime_cpu, last_iter] = MLP(5, 0.0001, 1000, max_iter, 0.6, 1);
+    [correct, test_err, train_err, runtime_cpu, last_iter] = MLP(2, 0.001, 11791, max_iter, 0.75, 1);;
 % end
 %%
 f=figure();
