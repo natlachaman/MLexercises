@@ -21,6 +21,8 @@ class BoltzmannMachine:
 
     def mean_field(self):
 
+        print('training....')
+
         # clamped statistics
         Si_c = np.mean(self.train, axis=0)
         Sij_c = np.dot(self.train.T, self.train) / self.train.shape[0]
@@ -44,8 +46,6 @@ class BoltzmannMachine:
 
         # validate results
         self.val_p = np.vstack(self.predict('val'))
-
-        print('training terminated')
 
     def exact(self):
 
