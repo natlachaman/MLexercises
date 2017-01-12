@@ -17,9 +17,11 @@ class BoltzmannMachine:
         self.delta = []
         self.val_p = 0
         self.mi = 0
-        self.Xij = 0
+        self.invXij = 0
 
     def mean_field(self):
+
+        print('training....')
 
         # clamped statistics
         Si_c = np.mean(self.train, axis=0)
@@ -28,12 +30,14 @@ class BoltzmannMachine:
         # mean field equations (with no hidden neurons)
         self.mi = Si_c # mean firing rate
 
-        C = Sij_c - np.dot(self.mi.T, self.mi)
-        np.fill_diagonal(C, 1 - self.mi ** 2) # add diagonal correction on X_ii
-        self.Xij = np.linalg.inv(C) # linear response
+        # linear response
+        Xij = Sij_c - np.dot(self.mi.T, self.mi)
+        self.invXij = np.linalg.inv(Xij)
 
         # compute w and theta
-        self.w = -self.Xij
+        self.w = -self.invXij
+        # (subtract additional constraint on the weights)
+        np.fill_diagonal(self.w, 1. / (1 - self.mi ** 2) - np.diag(self.invXij))
         self.theta = np.arctanh(self.mi) - np.dot(self.w, self.mi)
 
         # compute the mean field free energy F
@@ -42,8 +46,6 @@ class BoltzmannMachine:
 
         # validate results
         self.val_p = np.vstack(self.predict('val'))
-
-        print('training terminated')
 
     def exact(self):
 
@@ -105,7 +107,7 @@ class BoltzmannMachine:
         P = []
         Z = np.exp(-self.F)
         for m in tqdm(range(len(data))):
-            p = np.exp(0.5 *np.dot(np.dot(data[m, :], self.w), data[m, :]) + np.dot(self.theta, data[m, :])) / Z
+            p = np.exp(0.5 * np.dot(np.dot(data[m, :], self.w), data[m, :]) + np.dot(self.theta, data[m, :])) / Z
             P.append(p)
 
         return P
