@@ -1,32 +1,59 @@
 % cls
-function [correct, test_err, train_err, runtime, last_iter] = MLP(layers, eta, neurons_h, max_iter, momentum, GPU)
+function [correct, test_err, train_err, runtime, last_iter] = MLP(layers, neurons_h, eta , max_iter, momentum, randomize, w_init, batch_size, GPU)
 
 load('mnistAll.mat')
 rng(18)
 % settings
-% GPU = 0;
-% momentum = 0.75;
+if ~exist('GPU','var') || isempty(GPU)
+  GPU = 0;
+end
+if ~exist('momentum','var') || isempty(momentum)
+  momentum = 0;
+end
+if ~exist('eta','var') || isempty(eta)
+  eta = 0.001;
+end
+if ~exist('layers','var') || isempty(layers)
+  layers = 2;
+end
+if ~exist('neurons_h','var') || isempty(neurons_h)
+  neurons_h = 100;
+end
+if ~exist('max_iter','var') || isempty(max_iter)
+  max_iter = 100;
+end
+if ~exist('randomize','var') || isempty(randomize)
+  randomize = 0;
+end
+if ~exist('w_init','var') || isempty(w_init)
+  w_init = 1;
+end
+if ~exist('batch_size','var') || isempty(batch_size)
+  batch_size = 1;
+end
+
 
 % define parameters
-% eta = 0.001;                 % learning rate
-% layers = 2;                  % # layers  =(hidden layers + 1)
-% neurons_h = 10;              % # neurons per hidden layer
 neurons_in = 784;              % # input neurons
 neurons_out = 1;               % # output neurons
-% max_iter = 25000;            % # iterate for so long
 bias = -1;
 assert(layers>1);            % layers must be at least 2
 class_1   = 4;
 class_2   = 9;
-randomize = 0;
+
+sprintf(['Settings\nLayers: ',num2str(layers), '\nNeurons: ',num2str(neurons_h),...
+    '\nLearning-rate: ',num2str(eta), '\nIterations: ',num2str(max_iter),...
+    '\nMomentum: ', num2str(momentum), '\nRandomize: ',num2str(randomize),...
+    '\nW_init: ', num2str(w_init), '\nBatch-size: ', num2str(batch_size)
+    ])
 
 % define weights matrixes
 w = cell(1,layers);
-w{1}  = rand(neurons_h,neurons_in)*2-1;
+w{1}  = (rand(neurons_h,neurons_in)*2-1) * w_init;
 for k = 2:layers
-   w{k}  = rand(neurons_h,neurons_h)*2-1;
+   w{k}  = (rand(neurons_h,neurons_h)*2-1) * w_init;
 end
-w{end} = rand(neurons_out,neurons_h)*2-1;
+w{end} = (rand(neurons_out,neurons_h)*2-1) * w_init;
 
 
 % define input and output memorx for each neuron
@@ -91,6 +118,7 @@ if GPU
         w{k}=gpuArray(w{k}); 
         d{k}=gpuArray(d{k}); 
         x{k}=gpuArray(x{k}); 
+        m{k}=gpuArray(m{k});
     end
 else
     disp('Using CPU...');
@@ -100,7 +128,7 @@ end
 
 
 %print initial performance
-mlp_predict(w, bias, test, test_label)
+disp(['Initial correct: ',num2str(mlp_predict(w, bias, test, test_label))])
 eta_0 = eta;
 tic
 t_start = tic;
@@ -113,13 +141,13 @@ while(~converged && iter ~= max_iter)
     acc = 0;
 	if randomize==1
 		ordering = randperm(length(train));
-		train = train(:, ordering);
-		train_label = train_label(ordering);
+    else
+        ordering = 1:length(train);
 	end
     
-    for u = 1:length(train)
+    for sample = 1:length(train)
          % forward step
-        
+        u = ordering(sample);
         img = train(:,u);          % get input image
         x{1}  = tanh(w{1} * img + bias);             % calulate output for first layer
         for k = 2:layers
@@ -132,17 +160,27 @@ while(~converged && iter ~= max_iter)
         
 %         backpropagation
         d{end} = (x{end}-t(u)) .* (1-tanh(w{end}*x{end-1}).^2) ;  
-        m{end} = (eta * d{end} * x{end-1}') + m{end} * momentum;
-        w{end} = w{end} - m{end};
+        m{end} =  (eta * d{end} * x{end-1}') + m{end} * momentum + m{end};
+        if mod(u, batch_size) == 0
+            w{end}  = w{end} - m{end};
+            m{end} = zeros(neurons_out,neurons_h);
+        end
+
         for k = layers-1:-1:2
             d{k} = w{k+1}' * d{k+1} .* (1-tanh(w{k}*x{k-1}).^2) ;
             m{k} = eta * d{k}*x{k-1}' + m{k} * momentum;
-            w{k} = w{k} - m{k};
+            if mod(u, batch_size) == 0
+               w{k} = w{k} - m{k};
+               m{k} = zeros(neurons_h,neurons_h);
+            end
         end
 
         d{1} = w{2}' * d{2} .* (1-tanh(w{1}*img).^2) ;
         m{1} = eta * d{1}*img' + m{1} * momentum;
-        w{1} = w{1} - m{1};
+        if mod(u, batch_size) == 0
+            w{1} = w{1} - m{1};
+            m{1} = zeros(neurons_h,neurons_in);
+        end
 
     end
     acc = acc / length(train);
