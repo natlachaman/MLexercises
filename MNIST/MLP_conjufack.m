@@ -167,14 +167,14 @@ while(~converged && iter ~= max_iter)
 %             beta = ((m{k} - m_{k}) * m{k}')./(m_{k}*m_{k}');
 %             beta = beta(logical(eye(length(beta))));
 %             beta = repmat(beta,1,size(m{k},2));
-            beta = ((m{k} - m_{k}) .* m{k})./(m_{k}.* m_{k});
-            beta = sum(sum(beta));
+            beta = sum(sum((m{k} - m_{k}) .* m{k}));
+            beta = beta ./ sum(sum(m_{k}.* m_{k}));
             
             dir{k} = - m{k} + beta * dir_{k};
             m_{k} = m{k};
         end
         
-        w{k} = w{k} + 0.00001 * dir{k};
+        w{k} = w{k} - eta * dir{k};
         
     end
     
