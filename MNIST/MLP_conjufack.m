@@ -115,10 +115,11 @@ while(~converged && iter ~= max_iter)
 		ordering = randperm(length(train));
 		train = train(:, ordering);
 		train_label = train_label(ordering);
-	end
+    end
     
+%     forward step
+
     for u = 1:length(train)
-         % forward step
         
         img = train(:,u);          % get input image
         x{1}  = tanh(w{1} * img + bias);             % calulate output for first layer
@@ -129,34 +130,54 @@ while(~converged && iter ~= max_iter)
         
         err = 0.5 * (train_label(u) - gather(x{end})).^2;
         total_err = total_err +  sum(err);
-        
-%         backpropagation
+    
+%     backpropagation
 
-        d{end} = (x{end}-t(u)) .* (1-tanh(w{end}*x{end-1}).^2) ; 
-        m_new_out  = eta * d{end} * x{end-1}';
-        beta   = ((m_new_out - m{end}) * m_new_out')./(m{end}*m{end}');
-        m{end} = (eta * d{end} * x{end-1}') + beta*m{end};
-        w{end} = w{end} + m{end};
-        
-%         disp(w{end})
-        for k = layers-1:-1:2
-            d{k} = w{k+1}' * d{k+1} .* (1-tanh(w{k}*x{k-1}).^2) ;
-            m_new_h = eta * d{k}*x{k-1}';
-            beta   = (m_new_h - m{k} .* m_new_h')./(m{k}*m{k}');
-            beta = beta(logical(eye(5)));
-            beta = repmat(beta,1,5);
-            m{k} = (eta * d{k}*x{k-1}') + beta .* m{k};
-            w{k} = w{k} + m{k};
+        for k=layers:-1:1;
+
+            if k == layers;
+                o = t(u);
+                i = x{k-1};
+                mat = x{k};
+            elseif k == 1;
+                o = d{k+1};
+                i = img;
+                mat = w{k+1}';
+            else
+                o = d{k+1};
+                i = x{k-1};
+                mat = w{k+1}';
+            end
+
+            d{k} = mat * o .* (1-tanh(w{k}*i).^2);
+            m{k} = m{k} + (d{k}*i');
         end
-
-        d{1} = w{2}' * d{2} .* (1-tanh(w{1}*img).^2) ;
-        m_new_in = eta * d{1}*img';
-        beta   = ((m_new_in - m{1}) * m_new_in')./ (norm(m{1})^2);
-        beta = beta(logical(eye(5)));
-        beta = repmat(beta,1,784);
-        m{1} = eta * d{1}*img' + beta.*m{1};
-        w{1} = w{1} + m{1};
+        
     end
+    
+    
+    % conjugate gradient update
+    for k=layers:-1:1;
+        
+        if iter == 1;
+            dir{k} = - m{k};
+            m_{k} = m{k};
+        else
+            dir_{k} = dir{k};
+%             beta = ((m{k} - m_{k}) * m{k}')./(m_{k}*m_{k}');
+%             beta = beta(logical(eye(length(beta))));
+%             beta = repmat(beta,1,size(m{k},2));
+            beta = ((m{k} - m_{k}) .* m{k})./(m_{k}.* m_{k});
+            beta = sum(sum(beta));
+            
+            dir{k} = - m{k} + beta * dir_{k};
+            m_{k} = m{k};
+        end
+        
+        w{k} = w{k} + 0.00001 * dir{k};
+        
+    end
+    
     acc = acc / length(train);
     errors(iter)   = gather(total_err);
     [correct(iter), test_err(iter)]  = mlp_predict(w, bias, test, test_label);
