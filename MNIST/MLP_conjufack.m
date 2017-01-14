@@ -1,32 +1,61 @@
 % cls
-% function [correct, test_err, train_err, runtime, last_iter] = MLP(layers, eta, neurons_h, max_iter, momentum, GPU)
+function [correct, test_err, train_err, runtime, last_iter] = MLP_conjufack(layers, neurons_h, eta , max_iter, momentum, randomize, w_init, batch_size, GPU)
 
 load('mnistAll.mat')
 rng(18)
 % settings
-GPU = 0;
-momentum = 0.0;
+if ~exist('GPU','var') || isempty(GPU)
+  GPU = 0;
+end
+if ~exist('momentum','var') || isempty(momentum)
+  momentum = 0;
+end
+if ~exist('eta','var') || isempty(eta)
+  eta = 0.00001;
+end
+if ~exist('layers','var') || isempty(layers)
+  layers = 2;
+end
+if ~exist('neurons_h','var') || isempty(neurons_h)
+  neurons_h = 100;
+end
+if ~exist('max_iter','var') || isempty(max_iter)
+  max_iter = 100;
+end
+if ~exist('randomize','var') || isempty(randomize)
+  randomize = 0;
+end
+if ~exist('w_init','var') || isempty(w_init)
+  w_init = 1;
+end
+if ~exist('batch_size','var') || isempty(batch_size)
+  batch_size = 1;
+end
+if ~exist('method','var') || isempty(method)
+  method = 'CGD';
+end
 
 % define parameters
-eta = 0.001;                 % learning rate
-layers = 3;                  % # layers  =(hidden layers + 1)
-neurons_h = 5;              % # neurons per hidden layer
 neurons_in = 784;              % # input neurons
 neurons_out = 1;               % # output neurons
-max_iter = 100;            % # iterate for so long
 bias = -1;
 assert(layers>1);            % layers must be at least 2
 class_1   = 4;
 class_2   = 9;
-randomize = 0;
+
+sprintf(['Settings\nLayers: ',num2str(layers), '\nNeurons: ',num2str(neurons_h),...
+    '\nLearning-rate: ',num2str(eta), '\nIterations: ',num2str(max_iter),...
+    '\nMomentum: ', num2str(momentum), '\nRandomize: ',num2str(randomize),...
+    '\nW_init: ', num2str(w_init), '\nBatch-size: ', num2str(batch_size)
+    ])
 
 % define weights matrixes
 w = cell(1,layers);
-w{1}  = rand(neurons_h,neurons_in)*2-1;
+w{1}  = (rand(neurons_h,neurons_in)*2-1) * w_init;
 for k = 2:layers
-   w{k}  = rand(neurons_h,neurons_h)*2-1;
+   w{k}  = (rand(neurons_h,neurons_h)*2-1) * w_init;
 end
-w{end} = rand(neurons_out,neurons_h)*2-1;
+w{end} = (rand(neurons_out,neurons_h)*2-1) * w_init;
 
 
 % define input and output memorx for each neuron
@@ -45,12 +74,15 @@ d{end}  = zeros(neurons_out,1);
 
 % define gradient memory
 m = cell(1,layers);
-m{1}  = ones(neurons_h,neurons_in);
+m{1}  = zeros(neurons_h,neurons_in);
 for k = 2:layers
-   m{k}  = ones(neurons_h,neurons_h);
+   m{k}  = zeros(neurons_h,neurons_h);
 end
-m{end} = ones(neurons_out,neurons_h);
+m{end} = zeros(neurons_out,neurons_h);
 
+S= m;
+oldR = 0
+m_old = m;
 % get train/test data
 train = double(mnist.train_images(:,:,(mnist.train_labels==class_1) | (mnist.train_labels==class_2)));
 train_label = double(mnist.train_labels((mnist.train_labels==class_1) | (mnist.train_labels==class_2)));
@@ -91,6 +123,7 @@ if GPU
         w{k}=gpuArray(w{k}); 
         d{k}=gpuArray(d{k}); 
         x{k}=gpuArray(x{k}); 
+        m{k}=gpuArray(m{k});
     end
 else
     disp('Using CPU...');
@@ -100,7 +133,7 @@ end
 
 
 %print initial performance
-mlp_predict(w, bias, test, test_label)
+disp(['Initial correct: ',num2str(mlp_predict(w, bias, test, test_label))])
 eta_0 = eta;
 tic
 t_start = tic;
@@ -113,14 +146,21 @@ while(~converged && iter ~= max_iter)
     acc = 0;
 	if randomize==1
 		ordering = randperm(length(train));
-		train = train(:, ordering);
-		train_label = train_label(ordering);
+    else
+        ordering = 1:length(train);
     end
     
-%     forward step
-
-    for u = 1:length(train)
-        
+    % define gradient memory
+        m = cell(1,layers);
+        m{1}  = zeros(neurons_h,neurons_in);
+        for k = 2:layers
+        m{k}  = zeros(neurons_h,neurons_h);
+        end
+        m{end} = zeros(neurons_out,neurons_h);
+    
+    for sample = 1:length(train)
+         % forward step
+        u = ordering(sample);
         img = train(:,u);          % get input image
         x{1}  = tanh(w{1} * img + bias);             % calulate output for first layer
         for k = 2:layers
@@ -130,58 +170,53 @@ while(~converged && iter ~= max_iter)
         
         err = 0.5 * (train_label(u) - gather(x{end})).^2;
         total_err = total_err +  sum(err);
-    
-%     backpropagation
-
-        for k=layers:-1:1;
-
-            if k == layers;
-                o = t(u);
-                i = x{k-1};
-                mat = x{k};
-            elseif k == 1;
-                o = d{k+1};
-                i = img;
-                mat = w{k+1}';
-            else
-                o = d{k+1};
-                i = x{k-1};
-                mat = w{k+1}';
-            end
-
-            d{k} = mat * o .* (1-tanh(w{k}*i).^2);
-            m{k} = m{k} + (d{k}*i');
-        end
         
+%         backpropagation
+        d{end} = (x{end}-t(u)) .* (1-tanh(w{end}*x{end-1}).^2) ;  
+        m{end} = m{end} +  (d{end} * x{end-1}');
+        for k = layers-1:-1:2
+            d{k} = w{k+1}' * d{k+1} .* (1-tanh(w{k}*x{k-1}).^2) ;
+            m{k} = m{k}+ d{k}*x{k-1}' ;
+        end
+        d{1} = w{2}' * d{2} .* (1-tanh(w{1}*img).^2) ;
+        m{1} = m{1}+ d{1}*img' ;
     end
     
+    R=[];
+    for k = 1:layers
+        R = vertcat(R,m{k}(:));
+    end
     
-    % conjugate gradient update
-    for k=layers:-1:1;
-        
-        if iter == 1;
-            dir{k} = - m{k};
-            m_{k} = m{k};
+    %Use the Polak-Ribiere method to calculate beta
+    if ((oldR'*oldR) ~= 0),
+        beta  =  R'*(R - oldR)/(oldR'*oldR);
+    else
+        beta  = 0;
+    end
+    beta=abs(beta);
+    
+    %Update the direction vector
+    for k = 1:layers
+         S{k}       = -m{k} + beta * S{k};
+    end
+    %Update the old vectors
+    oldR    = R;
+    
+%     Wo  = Wo + eta * reshape(S(Nh*(Ni+1)+1:end), No, Nh+1);
+%     Wh  = Wh + eta * reshape(S(1:Nh*(Ni+1)), Nh, Ni+1);
+    
+    for k = 1:layers
+        if  strcmp (method,'CGD')
+             w{k} = w{k} + eta*S{k}; 
         else
-            dir_{k} = dir{k};
-%             beta = ((m{k} - m_{k}) * m{k}')./(m_{k}*m_{k}');
-%             beta = beta(logical(eye(length(beta))));
-%             beta = repmat(beta,1,size(m{k},2));
-            beta = sum(sum((m{k} - m_{k}) .* m{k}));
-            beta = beta ./ sum(sum(m_{k}.* m_{k}));
-            
-            dir{k} = - m{k} + beta * dir_{k};
-            m_{k} = m{k};
+            w{k}   = w{k} - eta*m{k}; 
         end
-        
-        w{k} = w{k} - eta * dir{k};
-        
     end
-    
+
     acc = acc / length(train);
     errors(iter)   = gather(total_err);
     [correct(iter), test_err(iter)]  = mlp_predict(w, bias, test, test_label);
-   
+    
     if iter > 10
         if sum( test_err(end-5:end)<mean(test_err(end-10:end-5))) == 0
 %             converged = 1;
@@ -204,4 +239,4 @@ runtime   = toc(t_start);
 train_err = errors;
 correct   = correct;
 last_iter =  iter;
-% end
+end
