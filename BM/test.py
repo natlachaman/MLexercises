@@ -98,7 +98,7 @@ if __name__ == '__main__':
     opt = True
     while opt:
 
-        data = str(raw_input())
+        data = str(input())
 
         if data == 'random':
 
@@ -117,10 +117,15 @@ if __name__ == '__main__':
             bm = BoltzmannMachine(S, K=K, T=T, eta=eta)
             # train BM
             bm.exact(burn_in)
+            STD=np.array(bm.E_std)
 
             fig = plt.figure()
-            plt.plot(bm.delta_w)
-            plt.xlabel('iterations K=200')
+
+            # Energy standard deviation scaled and ploted as error bars
+            # with simulated anealing it should go to zero
+            scale=(max(bm.delta_w)-min(bm.delta_w))*.3
+            plt.errorbar(np.array(bm.betas)**-1,bm.delta_w,yerr=scale*STD/STD.max())
+            plt.xlabel('Temperature')
             plt.ylabel('mean of abs change rate of w')
             plt.show()
 

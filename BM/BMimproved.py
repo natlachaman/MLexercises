@@ -1,7 +1,8 @@
 import numpy as np
 from tqdm import tqdm
 
-
+def energy(w,s,b):
+    return np.dot(s, np.dot(w, s.T))+ np.dot(b.T, s.T)
 class BoltzmannMachine:
 
     def __init__(self, train, val=None, test=None, eta=1e-3, K=200, T=500):
@@ -61,29 +62,37 @@ class BoltzmannMachine:
         Si_f = np.zeros(states.shape)
         Sij_f = np.zeros((len(states), len(states)))
 
+
+        # EXTRA_CODE
+        E=energy(self.w,states,self.theta)
+        Delta_E=[]
+        for i,spin in enumerate(states):
+            temp_states=np.array(states)
+            temp_states[i]*=-1
+            Delta_E.append(energy(self.w,temp_states,self.theta)-E)
+        beta=1/max(Delta_E)
+        self.betas=[]
+        # EXTRA_CODE
+
+
         # K learning steps
+        self.E_std=[]
         for k in range(self.K):
-
+            beta*=1.05
+            self.betas.append(beta)
             # sequential stochastic dynamics (T=500)
+            E_all=[]
             for t in range(self.T + burn_in):
-
-                # probability to flip
-                h_s = np.dot(self.w, states) + self.theta
-                # E = np.dot(states, np.dot(self.w, states.T)) + np.dot(self.theta.T, states.T)
-
+                i = np.random.randint(N, size=1)
+                h_s = np.dot(self.w*beta, states) + self.theta
                 flip = 0.5 * (1 + np.tanh(-states * h_s))
-
-                # transition probability of the network to s'
-                Ts = flip / N
-
-                # randomly select which neurons to flip according to T(s'|s)
-                flipped = Ts > np.random.rand(N)
-                states[flipped] *= -1
-
+                if np.random.uniform(low=0.0, high=1.0)<flip[i]:
+                    states[i]*=-1
                 if t > burn_in:
                     Si_f += states
                     Sij_f += np.dot(states.T, states)
-
+                    E_all.append(energy(self.w,states,self.theta))
+            self.E_std.append(np.std(E_all))
             Si_f /= self.T
             Sij_f /= self.T
 
