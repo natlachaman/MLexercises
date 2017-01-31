@@ -27,7 +27,7 @@ end;
 X = reshape(J(:,1),[41,41]);
 V = reshape(J(:,2),[41,41]);
 JJ = reshape(J(:,3),[41,41]);
-surf(X,V,JJ)
+surf(X,V,-JJ)
 xlabel('x')
 ylabel('v')
 zlabel('J')
