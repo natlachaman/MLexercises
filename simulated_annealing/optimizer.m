@@ -2,18 +2,31 @@
 % minimize E= 0.5 x^T w x, with x=x_1,...,x_n and x_i=0,1
 % w is a symmetric real n x n matrix with zero diagonal
 
-METHOD='sa';
-NEIGHBORHOODSIZE=1;
+
+if(exist('w','var') ~=1 || exist('n','var')~=1 || exist('grid_x','var')~=1)
+    error('Please run makedata.m with the neigbourhood function of your choice.')
+end;
+
+% METHOD='iter';
+% NEIGHBORHOODSIZE=1;
 n_restart =500;
+colormap('Gray');
+gif_fps = 24;
+% Define string variable that holds the filename of ising gif
+video_filename = 'ising.gif';
+fh = figure(1);
+create_gif=1; % show ising state visualy or not
+
 
 tx = zeros(1,n_restart);
 switch METHOD,
 case 'iter'
     disp('Iterative Method')
+    tic
 	E_min = 1000;
 	E_min_all = [];
 	for t=1:n_restart,
-	    tic
+
 		% initialize
 		x = 2*(rand(1,n)>0.5)-1;
 		E1 = E(x,w);
@@ -36,13 +49,11 @@ case 'iter'
                         E1 = E1 + Delta;
                         x=xN;
                         E_all = [E_all E1];
-                        break;
                     end;
                 end;
                 % Terminate only if no new minimums are not found in the neighbourhood.
                 if (i==n)
                     flag = 0;
-                    tx(t) = toc;
                 end;
 
 			case 2,
@@ -57,36 +68,52 @@ case 'iter'
                             xN(j) = -1 * xN(j);
                             a = xN(i)-x(i);
                             b = xN(j)-x(j);
-%                             Delta = - (a*A(:,i)+b*A(:,j)) - 0.5 * (a*(a*w(i,i)+b*w(j,i))+b*(a*w(i,j)+b*w(j,j)));
                             Delta = - (a*A(:,i)+b*A(:,j)) - 0.5 * (a*b*w(j,i)+b*a*w(i,j));
                         else
                             Delta = - (xN(i) - x(i)) * A(i);
                         end;
-%                         Delta = E(xN,w) - E1;
                         if (Delta<0)
                             E1 = E1 + Delta;
                             x=xN;
                             innerFlag=0;
                             E_all = [E_all E1];
-                            break;
                         end;
                     end;
-                    if (innerFlag==0) break; end;
+%                     if (innerFlag==0) break; end;
                 end;
-                if (i==n && j==n) flag = 0; tx(t) = toc; end;
+                if (i==n && j==n) flag = 0; end;
 			end;
 		end;
-		if (E_min == E1) break;end;
+		if (E_min == E1)
+            E_min = min(E_min,E1);
+            E_min_all = [E_min_all E_min];
+		    break;
+		end;
+		if(create_gif==1)
+            imagesc(reshape(x,[grid_x,n/grid_x])');
+            xlabel(sprintf( 'E = %0.2f',   E1/n));
+            drawnow;
+            frame = getframe(fh);
+            % Turn screenshot into image
+            im = frame2im(frame);
+            % Turn image into indexed image (the gif format needs this)
+            [imind,cm] = rgb2ind(im,256);
+            % If first loop iteration: Create the file, else append to it
+            if t==1
+                imwrite(imind,cm,video_filename,'gif', 'Loopcount',inf);
+            else
+                imwrite(imind,cm,video_filename,'gif','WriteMode','append','DelayTime',1/gif_fps);
+            end
+        end;
 		E_min = min(E_min,E1);
 		E_min_all = [E_min_all E_min];
 	end;
 	E_min
 	t
+	tx = toc;
     plot(1:length(E_all),E_all)
 	xlabel('Iteration')
 	ylabel('Min Energy')
-
-
 case 'sa'
 	% initialize
     disp('Simulated Anealing')
@@ -129,15 +156,15 @@ case 'sa'
         end;
 
 	beta_init=1/max_dE;	% sets initial temperature
-	T1=10000; % length markov chain at fixed temperature
+	T1=2000; % length markov chain at fixed temperature
 	factor=1.05 ; % increment of beta at each new chain
 
-	beta=0.05; %
+	beta=beta_init;
 	E_bar(1)=1;
 	t2=1;
 	Beta_all=[beta];
 	HeatCapacity_all=[];
-	delta_all=[];
+	accept_all=[];
 	while E_bar(t2) > 0,
 	    C=beta^2 * E_bar(t2);
 	    HeatCapacity_all=[HeatCapacity_all C];
@@ -159,14 +186,14 @@ case 'sa'
                 if (delta < 0)
                     x=x_new;                   %accept x_new
                     E1=E1+Delta;
-                    delta_all=[delta_all Delta];
+                    accept_all=[accept_all 1];
                 else
                     if (rand< exp(-delta))     %accept x_new with probability exp -delta
                         x=x_new;
                         E1=E1+Delta;
-                        delta_all=[delta_all Delta];
+                        accept_all=[accept_all 1];
                     else
-%                         delta_all=[delta_all 0];
+                        accept_all=[accept_all 0];
                     end
                 end;
 			case 2,
@@ -188,36 +215,42 @@ case 'sa'
                 if (delta < 0)
                     x=x_new;                   %accept x_new
                     E1=E1+Delta;
-                    delta_all=[delta_all Delta];
+                    accept_all=[accept_all 1];
                 else
                     if (rand< exp(-delta))     %accept x_new with probability exp -delta
                         x=x_new;
                         E1=E1+Delta;
-                        delta_all=[delta_all Delta];
+                        accept_all=[accept_all 1];
                     else
-%                         delta_all=[delta_all 0];
+                        accept_all=[accept_all 0];
                     end
                 end;
 			end;
 			% E1 is energy of new state
 			E_all(t1)=E1;
 		end;
-		imagesc(reshape(x,[grid_x,n/grid_x])');
-        xlabel(sprintf('T = %0.2f, E = %0.2f', 1/beta,  E1/n));
-        drawnow;
+		if(create_gif==1)
+            imagesc(reshape(x,[grid_x,n/grid_x])');
+            xlabel(sprintf('T = %0.2f, E = %0.2f', 1/beta,  E1/n));
+            drawnow;
+            frame = getframe(fh);
+            % Turn screenshot into image
+            im = frame2im(frame);
+            % Turn image into indexed image (the gif format needs this)
+            [imind,cm] = rgb2ind(im,256);
+            % If first loop iteration: Create the file, else append to it
+            if t2==2
+                imwrite(imind,cm,video_filename,'gif', 'Loopcount',inf);
+            else
+                imwrite(imind,cm,video_filename,'gif','WriteMode','append','DelayTime',1/gif_fps);
+            end
+        end;
 		E_outer(t2)=mean(E_all);
 		E_bar(t2)=std(E_all);
 		[t2 beta E_outer(t2) E_bar(t2)] % observe convergence
 	end;
 	E_min=E_all(1) % minimal energy
-    errorbar(Beta_all.^-1,E_outer(1:t2)/n,E_bar(1:t2)/n,'-.k.')
-%     plot(Beta_all.^-1,E_bar(1:t2)/n)
-	set(gca,'xscale','log')
-    xlim([0,20]);
-	xlabel('Temperature');
-% 	ylabel('sd of Energy');
-	ylabel('Energy per spin');
-	title('Triangular Lattice Ising Frustrated');
+
 end;
 
 
