@@ -19,7 +19,7 @@ def training(clfs, yval):
     hits = np.array(pred == yval, dtype=np.int32)
     accuracy = np.mean(hits)
 
-    print("Accuracy on validation test: " + str(accuracy))
+    print("Accuracy on validation set: " + str(accuracy))
 
 
 def classify(clfs, ytest):
@@ -36,6 +36,7 @@ def classify(clfs, ytest):
     hits = np.array(pred == ytest, dtype=np.int32)
     accuracy = np.mean(hits)
 
+    # plot predictions vs. ground truth
     fig = plt.figure()
     for j in range(10):
         i = np.random.randint(0, len(ytest), 1)
@@ -79,18 +80,22 @@ if __name__ == '__main__':
             M = 100 # num training samples
             T = 500 # num of sequential dynamic steps
             K = 200 # num of training iters
-            eta = 1e-3
+            eta = 1e-3 # learning step
+            burn_in = 300 # burn-in period
+            alpha = 0 # momentum scale
 
             # training data
             S = np.random.choice([1, -1], [M, N])
 
             # BM
             bm = BoltzmannMachine(S, K=K, T=T, eta=eta)
-            # train BM
-            bm.exact()
 
+            # train BM
+            bm.monte_carlo(burn_in=burn_in, alpha=alpha)
+
+            # Plot change in weights
             fig = plt.figure()
-            plt.plot(np.arange(K), bm.delta)
+            plt.plot(np.arange(K), bm.delta_w)
             plt.xlabel('iterations K=200')
             plt.ylabel('average change rate in w')
             plt.show()
@@ -114,32 +119,23 @@ if __name__ == '__main__':
             # prepare train data set
             ntrain = xtrain.shape[-1]
 
-            xtrain = xtrain.T.reshape(ntrain, -1) / 255.
-            xtrain_ = np.array(xtrain > 0.5, dtype=np.float32)
-            xtrain = add_noise(xtrain_, 0.1)
+            xtrain = xtrain.T.reshape(ntrain, -1) / 255. # rescale
+            xtrain_ = np.array(xtrain > 0.5, dtype=np.float32) # binarize
+            xtrain = add_noise(xtrain_, 0.1) # add noise (10%)
 
             ytrain = np.squeeze(ytrain)
 
             # prepare val/test data sets
             ntest = xtest.shape[-1]
-            split = 500
+            split = 500 # val/test split
 
-            xval = xtest.T[:split].reshape(split, -1) / 255.
-            xval = np.array(xval > 0.5, dtype=np.float32)
+            xval = xtest.T[:split].reshape(split, -1) / 255. # rescale
+            xval = np.array(xval > 0.5, dtype=np.float32) # binarize
             yval = np.squeeze(ytest[:split])
 
-            xtest = xtest.T[split:].reshape(ntest - split, -1) / 255.
-            xtest = np.array(xtest > 0.5, dtype=np.float32)
+            xtest = xtest.T[split:].reshape(ntest - split, -1) / 255. # rescale
+            xtest = np.array(xtest > 0.5, dtype=np.float32) # binarize
             ytest = ytest[split:]
-
-            # # plot input and noisy input
-            # plt.figure()
-            # plt.subplot(2,1,1)
-            # plt.imshow(xtrain_[105].reshape(28,28).T)
-            # plt.subplot(2,1,2)
-            # plt.imshow(xtrain[105].reshape(28,28).T)
-            # sns.set_style("whitegrid", {'axes.grid' : False})
-            # plt.show()
 
             # create classifiers
             clfs = []
@@ -148,16 +144,6 @@ if __name__ == '__main__':
 
             # train them
             training(clfs, yval)
-
-            # # plot mean firing rate and linear response
-            # plt.figure()
-            # plt.subplot(2,1,1)
-            # plt.imshow(clfs[7].mi.reshape(28, 28).T)
-            # plt.subplot(2,1,2)
-            # plt.imshow(clfs[7].Xij)
-            # plt.colorbar()
-            # sns.set_style("whitegrid", {'axes.grid' : False})
-            # plt.show()
 
             # test them
             classify(clfs, ytest)
