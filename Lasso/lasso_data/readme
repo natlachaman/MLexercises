@@ -1,0 +1,10 @@
+this dir contains two problems 
+
+1: a data set with p=50 samples in n=100 dimensions. training data
+are (x,y) from data1_input_train (x) and data1_output_train (y).
+validation data are in (xv,yv) from data1_input_val (xv) and
+data1_output_val (yv).
+
+2: a matlab file correlated_data.m to generate samples from the
+problem with correlated data discussed on slide 23 with w=[2,3,0]
+and w=[-2,3,0].

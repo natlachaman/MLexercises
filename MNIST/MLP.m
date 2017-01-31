@@ -8,7 +8,7 @@ if ~exist('GPU','var') || isempty(GPU)
   GPU = 0;  % use GPU or not
 end
 if ~exist('momentum','var') || isempty(momentum)
-  momentum = 0; % Used momentum beta-value
+  momentum = 0.7; % Used momentum beta-value
 end
 if ~exist('eta','var') || isempty(eta)
   eta = 0.001;  % learning rate
